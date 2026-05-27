@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Financial Health Dashboard</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  :root {
+    --bg:#f5f4f0;--surface:#fff;--surface2:#f0eeea;
+    --text:#1a1a18;--text2:#6b6a65;--text3:#9e9d98;
+    --border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.14);
+    --green:#1a7a58;--green-bg:#e4f5ed;
+    --red:#a32d2d;--red-bg:#fcebeb;
+    --amber:#7a4a0a;--amber-bg:#faeeda;
+    --blue:#185fa5;--blue-bg:#e6f1fb;
+    --purple:#5a2d8a;--purple-bg:#f0e8fc;
+    --radius:10px;--radius-sm:6px;
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --bg:#1a1a18;--surface:#232320;--surface2:#2c2c29;
+    --text:#f0eeea;--text2:#a09e99;--text3:#6b6a65;
+    --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.14);
+    --green:#4ac98a;--green-bg:#0d3d26;
+    --red:#e87070;--red-bg:#3d1515;
+    --amber:#f0a040;--amber-bg:#3d2005;
+    --blue:#6aabf0;--blue-bg:#0d2a45;
+    --purple:#c084fc;--purple-bg:#2d1a45;
+  }}
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem;}
+  .wrap{max-width:960px;margin:0 auto;}
+  .header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:1.75rem;padding-bottom:1rem;border-bottom:0.5px solid var(--border2);}
+  .header h1{font-size:13px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text2);}
+  .header p{font-size:12px;color:var(--text3);margin-top:3px;}
+  .refresh-btn{display:inline-flex;align-items:center;gap:5px;margin-top:5px;font-size:11px;color:var(--blue);background:none;border:none;cursor:pointer;padding:0;}
+  .refresh-btn:hover{opacity:.7;}
+  .ts{font-size:11px;color:var(--text3);text-align:right;}
+  .tabs{display:flex;gap:6px;margin-bottom:1.25rem;background:var(--surface2);border-radius:var(--radius);padding:4px;width:fit-content;}
+  .tab{font-size:12px;font-weight:500;padding:6px 16px;border-radius:var(--radius-sm);border:none;cursor:pointer;background:transparent;color:var(--text2);transition:all .15s;}
+  .tab.active{background:var(--surface);color:var(--text);box-shadow:0 1px 4px rgba(0,0,0,0.1);}
+  .goal-panel{background:var(--surface);border-radius:var(--radius);border:0.5px solid var(--border);padding:1.25rem 1.5rem;margin-bottom:12px;}
+  .goal-top{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:.75rem;}
+  .goal-lhs h2{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px;}
+  .goal-big{font-size:30px;font-weight:700;line-height:1;}
+  .goal-sub{font-size:12px;color:var(--text3);margin-top:4px;}
+  .goal-stats{display:flex;gap:1.5rem;flex-wrap:wrap;}
+  .gstat{text-align:right;}
+  .gstat-val{font-size:20px;font-weight:600;}
+  .gstat-lbl{font-size:11px;color:var(--text3);margin-top:2px;}
+  .prog-track{background:var(--surface2);border-radius:99px;height:10px;overflow:hidden;margin-bottom:8px;}
+  .prog-fill{height:100%;border-radius:99px;transition:width .6s ease;}
+  .goal-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-top:1rem;}
+  .goal-card{background:var(--surface2);border-radius:var(--radius-sm);padding:10px 14px;}
+  .goal-card-val{font-size:20px;font-weight:600;}
+  .goal-card-lbl{font-size:11px;color:var(--text3);margin-top:3px;line-height:1.4;}
+  .mg{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px;}
+  .mc{background:var(--surface);border-radius:var(--radius);padding:1rem 1.125rem;border:0.5px solid var(--border);}
+  .mc-label{font-size:11px;color:var(--text2);margin-bottom:5px;}
+  .mc-val{font-size:22px;font-weight:600;color:var(--text);line-height:1;}
+  .mc-sub{font-size:11px;color:var(--text3);margin-top:4px;}
+  .green{color:var(--green)!important;}.red{color:var(--red)!important;}.amber{color:var(--amber)!important;}.purple{color:var(--purple)!important;}
+  .panel{background:var(--surface);border-radius:var(--radius);border:0.5px solid var(--border);padding:1.125rem;margin-bottom:12px;}
+  .sec{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;}
+  .g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+  .cw{position:relative;width:100%;}
+  .legend{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;font-size:11px;color:var(--text2);}
+  .leg-item{display:flex;align-items:center;gap:4px;}
+  .leg-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0;}
+  .ins{font-size:13px;color:var(--text);line-height:1.6;padding:9px 12px;background:var(--surface2);border-radius:var(--radius-sm);margin-bottom:8px;}
+  .ins:last-child{margin-bottom:0;}
+  .ins strong{font-weight:600;}
+  .tbl{width:100%;border-collapse:collapse;font-size:12px;}
+  .tbl th{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:6px 8px;border-bottom:0.5px solid var(--border2);text-align:right;}
+  .tbl th:first-child{text-align:left;}
+  .tbl td{padding:7px 8px;border-bottom:0.5px solid var(--border);text-align:right;color:var(--text);}
+  .tbl td:first-child{text-align:left;font-weight:500;}
+  .tbl tr:last-child td{border-bottom:none;}
+  .tbl tfoot td{font-weight:600;background:var(--surface2);}
+  .error-box{background:var(--red-bg);color:var(--red);border-radius:var(--radius);padding:1rem 1.25rem;font-size:13px;margin-bottom:1.5rem;line-height:1.6;}
+  .empty{font-size:13px;color:var(--text3);padding:8px 0;}
+  @media(max-width:560px){.g2{grid-template-columns:1fr;}.mg{grid-template-columns:repeat(2,1fr);}.gstat{text-align:left;}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="header">
+    <div>
+      <h1>Financial Health Dashboard</h1>
+      <p id="subline">Loading data...</p>
+    </div>
+    <div class="ts">
+      <div id="tsEl"></div>
+      <button class="refresh-btn" onclick="loadData()">↻ Refresh</button>
+    </div>
+  </div>
+  <div id="errorBox" class="error-box" style="display:none;"></div>
+  <div id="dashboard" style="display:none;">
+    <div class="tabs">
+      <button class="tab active" onclick="switchTab('month',this)">This month</button>
+      <button class="tab" onclick="switchTab('annual',this)">Annual view</button>
+    </div>
+
+    <!-- MONTH VIEW -->
+    <div id="view-month">
+      <div class="goal-panel">
+        <div class="goal-top">
+          <div class="goal-lhs">
+            <h2>Monthly net income vs $85,000 MXN goal</h2>
+            <div class="goal-big" id="m-net">—</div>
+            <div class="goal-sub">net income · <span id="m-month-label">—</span></div>
+          </div>
+          <div class="goal-stats">
+            <div class="gstat"><div class="gstat-val red" id="m-gap">—</div><div class="gstat-lbl">MXN to goal</div></div>
+            <div class="gstat"><div class="gstat-val amber" id="m-days">—</div><div class="gstat-lbl">days left</div></div>
+          </div>
+        </div>
+        <div class="prog-track"><div class="prog-fill" id="m-bar" style="width:0%"></div></div>
+        <div id="m-pct" style="font-size:11px;color:var(--text3);margin-bottom:.75rem;"></div>
+        <div class="goal-cards" id="m-goal-cards"></div>
+      </div>
+      <div class="mg" id="m-metrics"></div>
+      <div class="panel">
+        <p class="sec">Insights</p>
+        <div id="m-insights"></div>
+      </div>
+      <div class="g2">
+        <div class="panel">
+          <p class="sec">Daily income — paquetes vs tienda</p>
+          <div class="cw" style="height:180px;"><canvas id="c-daily-income"></canvas></div>
+          <div class="legend">
+            <span class="leg-item"><span class="leg-dot" style="background:#1a7a58"></span>Paquetes</span>
+            <span class="leg-item"><span class="leg-dot" style="background:#378ADD"></span>Tienda</span>
+          </div>
+        </div>
+        <div class="panel">
+          <p class="sec">Daily outgoings</p>
+          <div class="cw" style="height:180px;"><canvas id="c-daily-out"></canvas></div>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="panel">
+          <p class="sec">Income split — paquetes vs tienda</p>
+          <div class="cw" style="height:160px;"><canvas id="c-split"></canvas></div>
+          <div class="legend" id="leg-split"></div>
+        </div>
+        <div class="panel">
+          <p class="sec">Gross vs net</p>
+          <div class="cw" style="height:160px;"><canvas id="c-grossnet"></canvas></div>
+          <div class="legend" id="leg-grossnet"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <p class="sec">Daily breakdown</p>
+        <div id="m-table"></div>
+      </div>
+    </div>
+
+    <!-- ANNUAL VIEW -->
+    <div id="view-annual" style="display:none;">
+      <div class="mg" id="a-metrics"></div>
+      <div class="panel">
+        <p class="sec">Insights</p>
+        <div id="a-insights"></div>
+      </div>
+      <div class="panel">
+        <p class="sec">Monthly net income vs $85,000 target</p>
+        <div class="cw" style="height:200px;"><canvas id="c-annual-net"></canvas></div>
+        <div class="legend" style="margin-top:10px;">
+          <span class="leg-item"><span class="leg-dot" style="background:#1a7a58"></span>On target</span>
+          <span class="leg-item"><span class="leg-dot" style="background:#378ADD"></span>Below target</span>
+          <span class="leg-item"><span class="leg-dot" style="background:#e24b4a;height:2px;width:16px;border-radius:0;"></span>$85k goal line</span>
+        </div>
+      </div>
+      <div class="g2">
+        <div class="panel">
+          <p class="sec">Paquetes income by month</p>
+          <div class="cw" style="height:160px;"><canvas id="c-annual-paq"></canvas></div>
+        </div>
+        <div class="panel">
+          <p class="sec">Tienda income by month</p>
+          <div class="cw" style="height:160px;"><canvas id="c-annual-tienda"></canvas></div>
+        </div>
+      </div>
+      <div class="panel">
+        <p class="sec">Outgoings by month</p>
+        <div class="cw" style="height:160px;"><canvas id="c-annual-out"></canvas></div>
+      </div>
+      <div class="panel">
+        <p class="sec">Monthly summary</p>
+        <div id="a-table" style="overflow-x:auto;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────
+const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSgFVhGz33BxhBTWPDf92_C8eQq3xGc_EgGQw4qGaZuVgcuPfCN3sTO3ZKwaSyQWsj4vcq5HsAWVy6J/pub?output=csv';
+const GOAL = 85000;
+// ─────────────────────────────────────────────────────────────────────
+
+let charts = {};
+const MONTH_ORDER = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+function n(v){ return parseFloat(v)||0; }
+function fmt(v){ return '$'+Math.round(v).toLocaleString('es-MX'); }
+
+function daysInMonth(monthName){
+  const mi=MONTH_ORDER.indexOf(monthName);
+  if(mi===-1)return 30;
+  return new Date(new Date().getFullYear(),mi+1,0).getDate();
+}
+
+function daysLeftInMonth(monthName){
+  const now=new Date();
+  const curRaw=now.toLocaleString('es-MX',{month:'long'});
+  const cur=curRaw.charAt(0).toUpperCase()+curRaw.slice(1);
+  if(monthName!==cur)return 0;
+  return new Date(now.getFullYear(),now.getMonth()+1,0).getDate()-now.getDate();
+}
+
+function destroyCharts(){ Object.values(charts).forEach(c=>c.destroy()); charts={}; }
+
+function darkColors(){
+  const dark=window.matchMedia('(prefers-color-scheme:dark)').matches;
+  return { tc:dark?'#a09e99':'#6b6a65', gc:dark?'rgba(255,255,255,0.06)':'rgba(0,0,0,0.06)' };
+}
+
+function barChart(id, labels, datasets, opts={}){
+  const ctx=document.getElementById(id); if(!ctx)return;
+  const {tc,gc}=darkColors();
+  charts[id]=new Chart(ctx,{
+    type:'bar',
+    data:{labels,datasets:datasets.map(d=>({borderRadius:4,borderSkipped:false,...d}))},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
+      scales:{
+        x:{stacked:opts.stacked||false,ticks:{autoSkip:false,font:{size:10},color:tc},grid:{display:false}},
+        y:{stacked:opts.stacked||false,ticks:{font:{size:10},color:tc,callback:v=>fmt(v)},grid:{color:gc}}
+      }}
+  });
+}
+
+function donut(id, labels, data, colors, legId){
+  const ctx=document.getElementById(id); if(!ctx)return;
+  // filter out zero values so chart isn't broken
+  const filtered={labels:[],data:[],colors:[]};
+  labels.forEach((l,i)=>{ if(data[i]>0){filtered.labels.push(l);filtered.data.push(data[i]);filtered.colors.push(colors[i]);} });
+  if(filtered.data.length===0){ filtered.labels=['No data']; filtered.data=[1]; filtered.colors=['#ccc']; }
+  charts[id]=new Chart(ctx,{type:'doughnut',
+    data:{labels:filtered.labels,datasets:[{data:filtered.data,backgroundColor:filtered.colors,borderWidth:2,borderColor:'transparent'}]},
+    options:{responsive:true,maintainAspectRatio:false,cutout:'65%',
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>filtered.labels[0]==='No data'?'No data yet':`${c.label}: ${fmt(c.raw)}`}}}}
+  });
+  if(legId){
+    const el=document.getElementById(legId); el.innerHTML='';
+    filtered.labels.forEach((l,i)=>{ el.innerHTML+=`<span class="leg-item"><span class="leg-dot" style="background:${filtered.colors[i]}"></span>${l}</span>`; });
+  }
+}
+
+function switchTab(tab,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('view-month').style.display  = tab==='month' ?'':'none';
+  document.getElementById('view-annual').style.display = tab==='annual'?'':'none';
+}
+
+// ── PARSE — robust to merged header rows and any line endings ────────
+function parseRows(csvText){
+  // Normalise all line endings to \n before parsing
+  const clean = csvText.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const lines = clean.split('\n');
+  const rows = lines.map(l => l.split(','));
+
+  // Find header row — col 0 === 'Mes'
+  let hIdx = rows.findIndex(r => r[0] && r[0].trim().toLowerCase() === 'mes');
+  if(hIdx === -1){ console.error('Header row not found'); return []; }
+
+  const parsed = [];
+  for(let i = hIdx+1; i < rows.length; i++){
+    const r = rows[i];
+    const mes = (r[0]||'').trim();
+    const dia = parseInt(r[1])||0;
+    if(!mes || !dia) continue;
+
+    const paq    = n(r[2]) + n(r[3]) + n(r[4]);
+    const tienda = n(r[5]) + n(r[6]) + n(r[7]);
+    const egresos= n(r[8]);
+    const gross  = paq + tienda;
+    const net    = gross - egresos;
+
+    if(gross === 0 && egresos === 0) continue;
+
+    parsed.push({ mes, dia, paq, tienda, egresos, gross, net });
+  }
+  return parsed;
+}
+
+// ── MONTH VIEW ────────────────────────────────────────────────────────
+function buildMonth(data, monthName){
+  const rows=data.filter(r=>r.mes===monthName);
+  const totPaq    = rows.reduce((s,r)=>s+r.paq,0);
+  const totTienda = rows.reduce((s,r)=>s+r.tienda,0);
+  const totGross  = rows.reduce((s,r)=>s+r.gross,0);
+  const totEg     = rows.reduce((s,r)=>s+r.egresos,0);
+  const totNet    = totGross - totEg;
+  const gap       = Math.max(0,GOAL-totNet);
+  const pct       = Math.min(100,Math.round(totNet/GOAL*100));
+  const daysLeft  = daysLeftInMonth(monthName);
+  const daysTotal = daysInMonth(monthName);
+  const daysDone  = rows.length; // only days with actual data
+  const perDay    = daysLeft>0?Math.round(gap/daysLeft):0;
+  const avgDaily  = daysDone>0?Math.round(totNet/daysDone):0;
+  const projNet   = daysDone>0?Math.round((totNet/daysDone)*daysTotal):0;
+  const margin    = totGross>0?Math.round(totNet/totGross*100):0;
+  const paqShare  = totGross>0?Math.round(totPaq/totGross*100):0;
+
+  document.getElementById('m-month-label').textContent=monthName;
+  document.getElementById('m-net').textContent=fmt(totNet);
+  document.getElementById('m-gap').textContent=gap>0?fmt(gap):'$0';
+  document.getElementById('m-days').textContent=daysLeft;
+
+  const bar=document.getElementById('m-bar');
+  bar.style.width=pct+'%';
+  bar.style.background=pct<50?'var(--red)':pct<80?'#ba7517':'var(--green)';
+  document.getElementById('m-pct').textContent=`${pct}% of $85,000 MXN target · ${daysDone} days with data · ${daysLeft} days remaining`;
+
+  document.getElementById('m-goal-cards').innerHTML=`
+    <div class="goal-card"><div class="goal-card-val ${gap>0?'red':'green'}">${fmt(gap>0?gap:totNet)}</div><div class="goal-card-lbl">${gap>0?'MXN still needed to hit goal':'Goal reached!'}</div></div>
+    <div class="goal-card"><div class="goal-card-val amber">${fmt(perDay)}</div><div class="goal-card-lbl">MXN needed per day to close the gap</div></div>
+    <div class="goal-card"><div class="goal-card-val">${fmt(totPaq)}</div><div class="goal-card-lbl">Paquetes income this cycle</div></div>
+    <div class="goal-card"><div class="goal-card-val">${fmt(totTienda)}</div><div class="goal-card-lbl">Tienda income this cycle</div></div>
+  `;
+
+  document.getElementById('m-metrics').innerHTML=[
+    {label:'Gross income',  val:fmt(totGross), sub:'before outgoings',       cls:''},
+    {label:'Outgoings',     val:fmt(totEg),    sub:'total egresos',          cls:totEg>0?'red':''},
+    {label:'Net income',    val:fmt(totNet),   sub:'gross minus outgoings',  cls:totNet>=0?'green':'red'},
+    {label:'Paquetes',      val:fmt(totPaq),   sub:`${paqShare}% of gross`,  cls:''},
+    {label:'Tienda',        val:fmt(totTienda),sub:`${100-paqShare}% of gross`,cls:'purple'},
+    {label:'Days left',     val:daysLeft,      sub:`of ${daysTotal} in ${monthName}`,cls:daysLeft<5?'red':daysLeft<10?'amber':''},
+  ].map(m=>`<div class="mc"><div class="mc-label">${m.label}</div><div class="mc-val ${m.cls}">${m.val}</div><div class="mc-sub">${m.sub}</div></div>`).join('');
+
+  document.getElementById('m-insights').innerHTML=[
+    gap>0
+      ?`<strong>${fmt(gap)} MXN to go</strong> to hit the $85,000 goal. Current daily run rate: ${fmt(avgDaily)}/day. Need ${fmt(perDay)}/day for the remaining ${daysLeft} days. ${perDay>avgDaily?`That's <strong>${fmt(perDay-avgDaily)} more per day</strong> than current pace.`:'You are on track if pace holds.'}`
+      :`<strong>Goal reached!</strong> Net income of ${fmt(totNet)} has passed the $85,000 MXN target.`,
+    `<strong>Gross: ${fmt(totGross)} · Outgoings: ${fmt(totEg)} · Net margin: ${margin}%.</strong> ${margin<30?'Outgoings are taking a big share — worth reviewing costs.':margin<60?'Healthy margin so far.':'Strong margin this cycle.'}`,
+    `<strong>Paquetes: ${fmt(totPaq)} (${paqShare}%) · Tienda: ${fmt(totTienda)} (${100-paqShare}%).</strong> ${paqShare>85?'Income is heavily membership-led — tienda growth would diversify revenue.':'Good spread across both revenue streams.'}`,
+    daysDone>1?`<strong>Projected month-end net: ${fmt(projNet)}</strong> based on ${daysDone} days of data. ${projNet>=GOAL?'On track to hit target.':'Below target at current pace.'}`:`Only ${daysDone} day${daysDone!==1?'s':''} of data — projection will improve as you fill in the sheet.`,
+  ].map(t=>`<div class="ins">${t}</div>`).join('');
+
+  // charts
+  const sorted=[...rows].sort((a,b)=>a.dia-b.dia);
+  const dlabels=sorted.map(r=>`Día ${r.dia}`);
+  barChart('c-daily-income',dlabels,[
+    {label:'Paquetes',data:sorted.map(r=>r.paq),  backgroundColor:'#1a7a58'},
+    {label:'Tienda',  data:sorted.map(r=>r.tienda),backgroundColor:'#378ADD'},
+  ],{stacked:true});
+  barChart('c-daily-out',dlabels,[{label:'Outgoings',data:sorted.map(r=>r.egresos),backgroundColor:'#e24b4a'}]);
+  donut('c-split',['Paquetes','Tienda'],[totPaq,totTienda],['#1a7a58','#378ADD'],'leg-split');
+  donut('c-grossnet',['Net income','Outgoings'],[Math.max(0,totNet),totEg],['#1a7a58','#e24b4a'],'leg-grossnet');
+
+  // table
+  const tRows=sorted.map(r=>`<tr>
+    <td>Día ${r.dia}</td>
+    <td>${fmt(r.paq)}</td>
+    <td>${fmt(r.tienda)}</td>
+    <td>${fmt(r.gross)}</td>
+    <td>${fmt(r.egresos)}</td>
+    <td style="color:${r.net>=0?'var(--green)':'var(--red)'};">${fmt(r.net)}</td>
+  </tr>`).join('');
+  document.getElementById('m-table').innerHTML=rows.length===0
+    ?'<p class="empty">No data for this month yet. Add entries to your sheet and refresh.</p>'
+    :`<table class="tbl">
+       <thead><tr><th>Day</th><th>Paquetes</th><th>Tienda</th><th>Gross</th><th>Outgoings</th><th>Net</th></tr></thead>
+       <tbody>${tRows}</tbody>
+       <tfoot><tr><td>Total</td><td>${fmt(totPaq)}</td><td>${fmt(totTienda)}</td><td>${fmt(totGross)}</td><td>${fmt(totEg)}</td><td style="color:${totNet>=0?'var(--green)':'var(--red)'};">${fmt(totNet)}</td></tr></tfoot>
+     </table>`;
+}
+
+// ── ANNUAL VIEW ───────────────────────────────────────────────────────
+function buildAnnual(data){
+  const months=[...new Set(data.map(r=>r.mes))].sort((a,b)=>MONTH_ORDER.indexOf(a)-MONTH_ORDER.indexOf(b));
+  const monthly=months.map(mes=>{
+    const rows=data.filter(r=>r.mes===mes);
+    const paq    =rows.reduce((s,r)=>s+r.paq,0);
+    const tienda =rows.reduce((s,r)=>s+r.tienda,0);
+    const egresos=rows.reduce((s,r)=>s+r.egresos,0);
+    const gross  =paq+tienda;
+    const net    =gross-egresos;
+    return {mes,paq,tienda,egresos,gross,net};
+  });
+
+  const totalGross  =monthly.reduce((s,m)=>s+m.gross,0);
+  const totalNet    =monthly.reduce((s,m)=>s+m.net,0);
+  const totalPaq    =monthly.reduce((s,m)=>s+m.paq,0);
+  const totalTienda =monthly.reduce((s,m)=>s+m.tienda,0);
+  const totalEg     =monthly.reduce((s,m)=>s+m.egresos,0);
+  const avgNet      =monthly.length>0?Math.round(totalNet/monthly.length):0;
+  const best        =monthly.length>0?monthly.reduce((b,m)=>m.net>b.net?m:b,monthly[0]):{mes:'—',net:0};
+  const annMargin   =totalGross>0?Math.round(totalNet/totalGross*100):0;
+  const onTarget    =monthly.filter(m=>m.net>=GOAL).length;
+
+  document.getElementById('a-metrics').innerHTML=[
+    {label:'Annual gross',     val:fmt(totalGross),  sub:'all months combined',   cls:''},
+    {label:'Annual outgoings', val:fmt(totalEg),     sub:'total egresos',         cls:'red'},
+    {label:'Annual net',       val:fmt(totalNet),    sub:'gross minus outgoings', cls:totalNet>=0?'green':'red'},
+    {label:'Paquetes total',   val:fmt(totalPaq),    sub:'annual',                cls:''},
+    {label:'Tienda total',     val:fmt(totalTienda), sub:'annual',                cls:'purple'},
+    {label:'Avg monthly net',  val:fmt(avgNet),      sub:'vs $85,000 goal',       cls:avgNet>=GOAL?'green':'amber'},
+    {label:'Best month',       val:best.mes,         sub:fmt(best.net)+' net',    cls:''},
+    {label:'Months on target', val:onTarget,         sub:`of ${monthly.length} tracked`, cls:onTarget>0?'green':'amber'},
+  ].map(m=>`<div class="mc"><div class="mc-label">${m.label}</div><div class="mc-val ${m.cls}">${m.val}</div><div class="mc-sub">${m.sub}</div></div>`).join('');
+
+  document.getElementById('a-insights').innerHTML=[
+    `<strong>Annual net so far: ${fmt(totalNet)}</strong> across ${monthly.length} month${monthly.length!==1?'s':''} of data. Average monthly net: ${fmt(avgNet)} — ${avgNet>=GOAL?'above':'below'} the $85,000 target.`,
+    `<strong>Net margin: ${annMargin}%</strong> (${fmt(totalEg)} in outgoings vs ${fmt(totalGross)} gross). ${annMargin<30?'Worth reviewing costs.':annMargin<60?'Healthy margin overall.':'Strong margin — well controlled costs.'}`,
+    `<strong>Paquetes: ${fmt(totalPaq)} · Tienda: ${fmt(totalTienda)}.</strong> ${totalGross>0?`Paquetes are ${Math.round(totalPaq/totalGross*100)}% of total income.`:''}`,
+    onTarget>0?`<strong>${onTarget} month${onTarget!==1?'s':''} hit the $85,000 target</strong> so far.`:`<strong>No months have hit the $85,000 target yet</strong> — keep building. As you backfill data this view will show the full picture.`,
+  ].map(t=>`<div class="ins">${t}</div>`).join('');
+
+  const labels=monthly.map(m=>m.mes.slice(0,3));
+  const {tc,gc}=darkColors();
+  const netCtx=document.getElementById('c-annual-net');
+  if(netCtx){
+    charts['c-annual-net']=new Chart(netCtx,{
+      type:'bar',
+      data:{labels,datasets:[
+        {label:'Net income',data:monthly.map(m=>m.net),backgroundColor:monthly.map(m=>m.net>=GOAL?'#1a7a58':'#378ADD'),borderRadius:4,borderSkipped:false},
+        {type:'line',label:'$85k goal',data:monthly.map(()=>GOAL),borderColor:'#e24b4a',borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false,tension:0},
+      ]},
+      options:{responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false},tooltip:{mode:'index',intersect:false}},
+        scales:{x:{ticks:{font:{size:10},color:tc},grid:{display:false}},y:{ticks:{font:{size:10},color:tc,callback:v=>fmt(v)},grid:{color:gc}}}}
+    });
+  }
+
+  barChart('c-annual-paq',   labels,[{label:'Paquetes',data:monthly.map(m=>m.paq),   backgroundColor:'#1a7a58'}]);
+  barChart('c-annual-tienda',labels,[{label:'Tienda',  data:monthly.map(m=>m.tienda),backgroundColor:'#378ADD'}]);
+  barChart('c-annual-out',   labels,[{label:'Outgoings',data:monthly.map(m=>m.egresos),backgroundColor:'#e24b4a'}]);
+
+  const tRows=monthly.map(m=>`<tr>
+    <td>${m.mes}</td><td>${fmt(m.paq)}</td><td>${fmt(m.tienda)}</td>
+    <td>${fmt(m.gross)}</td><td>${fmt(m.egresos)}</td>
+    <td style="color:${m.net>=0?'var(--green)':'var(--red)'};">${fmt(m.net)}</td>
+    <td><span style="font-size:10px;padding:2px 7px;border-radius:20px;font-weight:600;background:${m.net>=GOAL?'var(--green-bg)':'var(--amber-bg)'};color:${m.net>=GOAL?'var(--green)':'var(--amber)'};">${m.net>=GOAL?'On target':'Below target'}</span></td>
+  </tr>`).join('');
+  document.getElementById('a-table').innerHTML=monthly.length===0
+    ?'<p class="empty">No data yet — add entries to your sheet and refresh.</p>'
+    :`<table class="tbl">
+       <thead><tr><th>Month</th><th>Paquetes</th><th>Tienda</th><th>Gross</th><th>Outgoings</th><th>Net</th><th>vs Goal</th></tr></thead>
+       <tbody>${tRows}</tbody>
+       <tfoot><tr><td>Total</td><td>${fmt(totalPaq)}</td><td>${fmt(totalTienda)}</td><td>${fmt(totalGross)}</td><td>${fmt(totalEg)}</td><td style="color:${totalNet>=0?'var(--green)':'var(--red)'};">${fmt(totalNet)}</td><td></td></tr></tfoot>
+     </table>`;
+}
+
+// ── MAIN ──────────────────────────────────────────────────────────────
+function buildDashboard(data){
+  destroyCharts();
+  const now=new Date();
+  const curRaw=now.toLocaleString('es-MX',{month:'long'});
+  const curMonth=curRaw.charAt(0).toUpperCase()+curRaw.slice(1);
+  const months=[...new Set(data.map(r=>r.mes))];
+  const activeMonth=months.includes(curMonth)?curMonth:(months[months.length-1]||curMonth);
+
+  document.getElementById('subline').textContent=`${data.length} daily entries · ${now.toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'})}`;
+  document.getElementById('tsEl').textContent=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+
+  buildMonth(data,activeMonth);
+  buildAnnual(data);
+  document.getElementById('dashboard').style.display='block';
+}
+
+async function loadData(){
+  document.getElementById('dashboard').style.display='none';
+  document.getElementById('errorBox').style.display='none';
+  document.getElementById('subline').textContent='Loading data...';
+
+  const proxies=[
+    'https://corsproxy.io/?'+encodeURIComponent(CSV_URL),
+    'https://api.allorigins.win/raw?url='+encodeURIComponent(CSV_URL),
+    'https://api.codetabs.com/v1/proxy?quest='+encodeURIComponent(CSV_URL),
+  ];
+
+  let lastErr='';
+  for(const url of proxies){
+    try{
+      const res=await fetch(url,{signal:AbortSignal.timeout(8000)});
+      if(!res.ok){lastErr=`HTTP ${res.status}`;continue;}
+      const text=await res.text();
+      if(!text||text.trim().length<10){lastErr='Empty response';continue;}
+      const data=parseRows(text);
+      if(!data.length){lastErr='No valid rows found — check the sheet has data rows below the header.';continue;}
+      buildDashboard(data);
+      return;
+    }catch(e){lastErr=e.message;}
+  }
+  document.getElementById('errorBox').textContent=`Could not load data: ${lastErr}. Check the sheet is published publicly via File → Share → Publish to web.`;
+  document.getElementById('errorBox').style.display='block';
+  document.getElementById('subline').textContent='Error loading data';
+}
+
+loadData();
+</script>
+</body>
+</html>
